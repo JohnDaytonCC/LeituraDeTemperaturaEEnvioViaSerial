@@ -1,0 +1,864 @@
+,,,;===============================================================================
+,,,;====== PROGRAMA PARA INDICAR A TEMPERATURA EM UM LCD E ENVIAR PARA     ========
+,,,;====== O COMPUTADOR VIA SERIAL.                                        ========
+,,,;====== TODO O HARDWARE ESTARÁ CODIFICADO COM SENHAS.                   ========
+,,,;===============================================================================
+,,,;---------------------------------- PINAGEM ---------------------------------------
+,,,; CONTROLE DO TECLADO -> P0
+,,,; INTERRUPÇÃO EXT -> P3.1
+,,,; CONVERSOR AD -> P1
+,,,; ENABLE DO LCD -> P2.0
+,,,; RS DO LCD -> P2.1
+,,,; LCD DE 4 VIAS -> DE 2.4 ATÉ 2.7
+,,,;////////////////////////////REGISTROS UTILIZADOS//////////////////////////////
+,,,; R0 R4 R5 08H 09H R2 R6 R7 R1 10H 0AH 0BH
+,,,;-----------------------------------------------------------------------------------
+,,,; DESENVOLVIDO POR: JOHN DAYTON CHAVES CUTÓDIO
+,,,; DATA DE DESENVOLVIMENTO: 03/09/2013
+,,,; ULTIMA ATUALIZAÇÃO: 03/09/2013
+,,,;======================================================================================
+,,,;------------------------------- DEFINIÇÕES DAS FLAGS --------------------------------------
+,,,
+,,,FLAG            EQU     00H             ;FLAG DE AUXILIO PARA CONTROLE DE TEMPO DE HABILITAÇÃO DO TI
+,,,FLAG1           EQU     01H             ;
+,,,FLAG_SENHA      EQU     02H             ;FLAG QUE INDICA QUE A SENHA ESTÁ CORRETA
+,,,FLAG_MOTOR      EQU     03H
+,,,FLAG_TEMP       EQU     04H
+,,,FLAG_SERIAL     EQU     05H
+,,,
+000D,,,AD              EQU     P0              ;PORTA DE ENTRADA DO AD
+000D,,,DISPLAY         EQU     P2              ;BARRAMENTO DE DADOS PARA O LCD
+000B,,,RS              EQU     P2.1            ;PINO REFERENTE AO RS DO LCD
+000B,,,ENABLE          EQU     P2.0            ;PINO REFERENTE AO ENABLE DO LCD
+000D,,,TECLA           EQU     P1              ;PORTA ATRIBUIDA AO TECLADO
+000B,,,M1              EQU     P3.4            ;PINO REFERENTE AO MOTOR
+000B,,,M2              EQU     P3.5            ;PINO REFERENTE AO MOTOR
+000B,,,M3              EQU     P3.6            ;PINO REFERENTE AO MOTOR
+000B,,,M4              EQU     P3.7            ;PINO REFERENTE AO MOTOR
+,,,
+,,,;------------------------------- DESVIOS DE IMTERRUPÇÕES -------------------------------------
+,,,        ORG     00H
+0000,61 DC,,        AJMP    CONFIG
+,,,        ORG     03H
+0003,01 1D,,        AJMP    EXT_0
+,,,        ORG     0BH
+000B,01 98,,        AJMP    TIMR_0
+,,,        ORG     1BH
+001B,01 AE,,        AJMP    TIMR_1
+,,,;============================================ INTERRUPÇÕES =========================================
+,,,
+,,,;------------------------------------------- EXTERNA 0 ---------------------------------------------
+001D,C2 8C,EXT_0,EXT_0:  CLR     TR0             ;DESLIGA O TIMER0
+001F,C0 E0,,        PUSH    ACC             ;SALVA NA PILHA O VALOR DO ACUMULADOR PARA CONSERVAR
+0021,E5 90,,        MOV     A,P1            ;LÊ A PORTA 1
+0023,D2 03,,        SETB    FLAG_MOTOR      ;SETA A FLAG QUE INFORMA A ENTRADA NO TIMER 0, PARA A ESCRETA DA TEC
+0025,D2 00,,        SETB    FLAG            ;SETA A FLAG PARA PODER HABILITAR O TIMER 0 APOS UM DETERMINADO TEMP
+,,,                                ;PARA NÃO ENTRAR NA INTERRUPÇÃO NOVAMENTE
+,,,
+0027,B4 D7 04,,        CJNE    A,#0D7H,EX_1    ;VERIFICA SE A TECLA PRESSIONADA FOI '0'
+002A,76 30,,        MOV     @R0,#'0'        ;SALVA NA MEMÓRIA O CÓDIGO ASCII DO 0
+002C,01 95,,        AJMP    F_EXT0          ;VAI PARA A SAÍDA DA INTERRUPÇÃO
+,,,
+002E,B4 EE 04,EX_1,EX_1:   CJNE    A,#0EEH,EX_2    ;VERIFICA SE A TECLA PRESSIONADA FOI '1'
+0031,76 31,,        MOV     @R0,#'1'
+0033,01 95,,        AJMP    F_EXT0
+,,,
+0035,B4 DE 04,EX_2,EX_2:   CJNE    A,#0DEH,EX_3    ;VERIFICA SE A TECLA PRESSIONADA FOI '2'
+0038,76 32,,        MOV     @R0,#'2'
+003A,01 95,,        AJMP    F_EXT0
+,,,
+003C,B4 BE 04,EX_3,EX_3:   CJNE    A,#0BEH,EX_4    ;VERIFICA SE A TECLA PRESSIONADA FOI '3'
+003F,76 33,,        MOV     @R0,#'3'
+0041,01 95,,        AJMP    F_EXT0
+,,,
+0043,B4 ED 04,EX_4,EX_4:   CJNE    A,#0EDH,EX_5    ;VERIFICA SE A TECLA PRESSIONADA FOI '4'
+0046,76 34,,        MOV     @R0,#'4'
+0048,01 95,,        AJMP    F_EXT0
+,,,
+004A,B4 DD 04,EX_5,EX_5:   CJNE    A,#0DDH,EX_6    ;VERIFICA SE A TECLA PRESSIONADA FOI '5'
+004D,76 35,,        MOV     @R0,#'5'
+004F,01 95,,        AJMP    F_EXT0
+,,,
+0051,B4 BD 04,EX_6,EX_6:   CJNE    A,#0BDH,EX_7    ;VERIFICA SE A TECLA PRESSIONADA FOI '6'
+0054,76 36,,        MOV     @R0,#'6'
+0056,01 95,,        AJMP    F_EXT0
+,,,
+0058,B4 EB 04,EX_7,EX_7:   CJNE    A,#0EBH,EX_8    ;VERIFICA SE A TECLA PRESSIONADA FOI '7'
+005B,76 37,,        MOV     @R0,#'7'
+005D,01 95,,        AJMP    F_EXT0
+,,,
+005F,B4 DB 04,EX_8,EX_8:   CJNE    A,#0DBH,EX_9    ;VERIFICA SE A TECLA PRESSIONADA FOI '8'
+0062,76 38,,        MOV     @R0,#'8'
+0064,01 95,,        AJMP    F_EXT0
+,,,
+0066,B4 BB 04,EX_9,EX_9:   CJNE    A,#0BBH,EX_10   ;VERIFICA SE A TECLA PRESSIONADA FOI '9'
+0069,76 39,,        MOV     @R0,#'9'
+006B,01 95,,        AJMP    F_EXT0
+,,,
+006D,B4 7E 04,EX_10,EX_10:  CJNE    A,#07EH,EX_11   ;VERIFICA SE A TECLA PRESSIONADA FOI 'A'
+0070,76 41,,        MOV     @R0,#'A'
+0072,01 95,,        AJMP    F_EXT0
+,,,
+0074,B4 7D 04,EX_11,EX_11:  CJNE    A,#07DH,EX_12   ;VERIFICA SE A TECLA PRESSIONADA FOI 'B'
+0077,76 42,,        MOV     @R0,#'B'
+0079,01 95,,        AJMP    F_EXT0
+,,,
+007B,B4 7B 04,EX_12,EX_12:  CJNE    A,#07BH,EX_13   ;VERIFICA SE A TECLA PRESSIONADA FOI 'C'
+007E,76 43,,        MOV     @R0,#'C'
+0080,01 95,,        AJMP    F_EXT0
+,,,
+0082,B4 77 04,EX_13,EX_13:  CJNE    A,#77H,EX_14    ;VERIFICA SE A TECLA PRESSIONADA FOI 'D'
+0085,76 44,,        MOV     @R0,#'D'
+0087,01 95,,        AJMP    F_EXT0
+,,,
+0089,B4 E7 04,EX_14,EX_14:  CJNE    A,#0E7H,EX_15   ;VERIFICA SE A TECLA PRESSIONADA FOI '*'
+008C,76 2A,,        MOV     @R0,#'*'
+008E,01 95,,        AJMP    F_EXT0
+,,,
+0090,B4 B7 02,EX_15,EX_15:  CJNE    A,#0B7H,F_EXT0  ;VERIFICA SE A TECLA PRESSIONADA FOI '*'
+0093,76 23,,        MOV     @R0,#23H
+,,,
+0095,D0 E0,F_EXT0,F_EXT0: POP     ACC
+0097,32,,        RETI                    ;SAI DA INTERRUPÇÃO
+,,,
+,,,;---------------------------------------------- TIMER 0 --------------------------------------------
+,,,;
+,,,
+0098,C0 E0,TIMR_0,TIMR_0: PUSH    ACC
+009A,BE FE 02,,        CJNE    R6,#0FEH,T0_1
+009D,7E EF,,        MOV     R6,#0EFH
+009F,EE,T0_1,T0_1:   MOV     A,R6
+00A0,54 F0,,        ANL     A,#0F0H
+00A2,FF,,        MOV     R7,A
+00A3,74 0F,,        MOV     A,#0FH          ;CARREGA O ACUMULADOR COM O VALOR DO TECLADO
+,,,;       ANL     A,#0FH          ;LIMPA A PARTE MAIS ALTA DO BYTE
+00A5,4F,,        ORL     A,R7            ;SOMA AS DUAS PARTES ALTO E BAIXO
+00A6,F5 90,,        MOV     TECLA,A
+00A8,EE,,        MOV     A,R6
+00A9,23,,        RL      A
+00AA,FE,,        MOV     R6,A
+00AB,D0 E0,,        POP     ACC
+00AD,32,,        RETI                    ;SAI DA INTERRUPÇÃO
+,,,
+,,,;------------------------------------------- TIMER 1 -----------------------------------------------
+,,,
+00AE,C0 E0,TIMR_1,TIMR_1: PUSH    ACC             ;SALVA O VALOR DO ACUMULADOR
+00B0,DB 7C,,        DJNZ    R3,ESP
+00B2,E5 0A,,        MOV     A,0AH           ;MOVE PARA O ACUMULADOR O VALOR DO REGISTRO R2 DO BANCO 1
+,,,
+00B4,B4 01 0A,T1_1,T1_1:   CJNE    A,#1,T1_2       ;VERIFICA QUAL O VALOR DE 0AH PARA SETAR OU LIMPAR OS PINOS REFERENT
+00B7,D2 B4,,        SETB    M1
+00B9,C2 B5,,        CLR     M2
+00BB,C2 B6,,        CLR     M3
+00BD,C2 B7,,        CLR     M4
+00BF,01 E6,,        AJMP    T_1
+00C1,B4 02 0A,T1_2,T1_2:   CJNE    A,#2,T1_3
+00C4,C2 B4,,        CLR     M1
+00C6,D2 B5,,        SETB    M2
+00C8,C2 B6,,        CLR     M3
+00CA,C2 B7,,        CLR     M4
+00CC,01 E6,,        AJMP    T_1
+00CE,B4 03 0A,T1_3,T1_3:   CJNE    A,#3,T1_4
+00D1,C2 B4,,        CLR     M1
+00D3,C2 B5,,        CLR     M2
+00D5,D2 B6,,        SETB    M3
+00D7,C2 B7,,        CLR     M4
+00D9,01 E6,,        AJMP    T_1
+00DB,C2 B4,T1_4,T1_4:   CLR     M1
+00DD,C2 B5,,        CLR     M2
+00DF,C2 B6,,        CLR     M3
+00E1,D2 B7,,        SETB    M4
+00E3,75 0A 00,,        MOV     0AH,#0
+,,,
+00E6,B6 31 02,T_1,T_1:    CJNE    @R0,#'1',T_2
+00E9,7B 11,,        MOV     R3,#17          ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 1
+00EB,B6 32 02,T_2,T_2:    CJNE    @R0,#'2',T_3
+00EE,7B 0F,,        MOV     R3,#15          ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 2
+00F0,B6 33 02,T_3,T_3:    CJNE    @R0,#'3',T_4
+00F3,7B 0D,,        MOV     R3,#13          ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 3
+00F5,B6 34 02,T_4,T_4:    CJNE    @R0,#'4',T_5
+00F8,7B 0B,,        MOV     R3,#11          ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 4
+00FA,B6 35 02,T_5,T_5:    CJNE    @R0,#'5',T_6
+00FD,7B 0A,,        MOV     R3,#10          ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 5
+00FF,B6 36 02,T_6,T_6:    CJNE    @R0,#'6',T_7
+0102,7B 09,,        MOV     R3,#9           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 6
+0104,B6 37 02,T_7,T_7:    CJNE    @R0,#'7',T_8
+0107,7B 08,,        MOV     R3,#8           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 7
+0109,B6 38 02,T_8,T_8:    CJNE    @R0,#'8',T_9
+010C,7B 07,,        MOV     R3,#7           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 8
+010E,B6 39 02,T_9,T_9:    CJNE    @R0,#'9',T_10
+0111,7B 06,,        MOV     R3,#6           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO 9
+0113,B6 41 02,T_10,T_10:   CJNE    @R0,#'A',T_11
+0116,7B 05,,        MOV     R3,#5           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO A
+0118,B6 42 02,T_11,T_11:   CJNE    @R0,#'B',T_12
+011B,7B 04,,        MOV     R3,#4           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO B
+011D,B6 43 02,T_12,T_12:   CJNE    @R0,#'C',T_13
+0120,7B 03,,        MOV     R3,#3           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO C
+0122,B6 44 02,T_13,T_13:   CJNE    @R0,#'D',T_14
+0125,7B 02,,        MOV     R3,#2           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO D
+0127,B6 2A 02,T_14,T_14:   CJNE    @R0,#'*',SAI_T1
+012A,7B 01,,        MOV     R3,#1           ;COMANDO DA VELOCIDADE DO MOTOR DE PASSO PARA BOTÃO *
+,,,
+012C,05 0A,SAI_T1,SAI_T1: INC     0AH
+012E,D0 E0,ESP,ESP:    POP     ACC             ;RECUPERA O VALOR INICIAL DO ACUMULADOR
+0130,32,,        RETI                    ;SAI DA INTERRUPÇÃO
+,,,
+,,,;======================================= ROTINAS DO PROGRAMA =======================================
+,,,
+,,,;-------------------------------------------- DELAY_MS ---------------------------------------------
+,,,; ROTINA VARIÁVEL, COM DURAÇÃO DE 0,5ms x (O VALOR PASADO EM ACUMULADOR(A))
+0131,FC,DELAY,DELAY:  MOV     R4,A            ;CARREGA O R4 (UNIDADE DE ms)
+0132,7D FF,,        MOV     R5,#255         ;CARREGA O R5 (P/ CONTAR 0.5ms)
+0134,DD FE,,        DJNZ    R5,$            ;DECREMENTA R5 E AGUARDA CHEGAR A 0
+0136,DC FB,,        DJNZ    R4,$-3          ;DECREMENTA R4 (SE 0 -> SEGUE, SE NÃO -> VOLTA TRÊS OPERAÇÕES)
+0138,22,,        RET                     ;RETORNA DA ROTINA
+,,,
+,,,;-------------------------------------------- ESCREVE ----------------------------------------------
+,,,; ESTA ROTINA ENVIA UM CARACTERE PARA O MÓDULO DE LCD.
+,,,; O CARACTERE A SER COLOCADO EM ACUMULADOR(A) ANTES DE CHAMAR A ROTINA.
+0139,F5 08,ESCREVE,ESCREVE:        MOV     08H,A           ;REPASSA O VALOR DE A AO R0 DO BANCO 2         \
+013B,54 F0,,                ANL     A,#0F0H         ;MASCARA OS BYTES MENOS SIGNIFICATIVOS          \
+013D,F5 09,,                MOV     09H,A           ;SALVA EM R1 DO BANCO 2                          \ROTINA PAR
+013F,E5 A0,,                MOV     A,DISPLAY       ;CARREGA O ACUMULADOR COM O VALOR DO DISPLAY     /MENOS SIGN
+0141,54 0F,,                ANL     A,#0FH          ;LIMPA A PARTE MAIS ALTA DO BYTE                /
+0143,45 09,,                ORL     A,09H           ;SOMA AS DUAS PARTES ALTO E BAIXO              /
+,,,
+0145,F5 A0,,                MOV     DISPLAY,A
+0147,00,,                NOP                     ;PERDE 1us PARA ESTABILIZAÇÃO DO LCD
+0148,D2 A0,,                SETB    ENABLE          ;ENVIA UM PULSO DE ENABLE AO DISPLAY
+014A,00,,                NOP
+014B,00,,                NOP                     ;PERDE 2us PARA ESTABILIZAÇÃO DO SINAL ENVIADO
+014C,C2 A0,,                CLR     ENABLE          ;DESLIGA O PULSO
+,,,
+014E,E5 08,,                MOV     A,08H           ;RECARREGA O VALOR ORIGINAL DO ACUMULADOR
+0150,C4,,                SWAP    A               ;ALTERA PARTE ALTA COM PARTE BAIXA O BYTE
+,,,
+0151,54 F0,,                ANL     A,#0F0H         ;MASCARA OS BYTES MENOS SIGNIFICATIVOS          \
+0153,F5 09,,                MOV     09H,A           ;SALVA EM R1 DO BANCO 2                          \ROTINA PAR
+0155,E5 A0,,                MOV     A,DISPLAY       ;CARREGA O ACUMULADOR COM O VALOR DO DISPLAY     /MENOS SIGN
+0157,54 0F,,                ANL     A,#0FH          ;LIMPA A PARTE MAIS ALTA DO BYTE                /
+0159,45 09,,                ORL     A,09H           ;SOMA AS DUAS PARTES ALTO E BAIXO              /
+,,,
+015B,F5 A0,,                MOV     DISPLAY,A       ;RECARREGA A PORTA P2 COM OS VALORES TROCADOS
+015D,00,,                NOP                     ;PERDE 1us PARA ESTABILIZAÇÃO DO LCD
+015E,D2 A0,,                SETB    ENABLE          ;ENVIA UM PULSO DE ENABLE AO DISPLAY
+0160,00,,                NOP
+0161,00,,                NOP                     ;PERDE 2us PARA ESTABILIZAÇÃO DO SINAL ENVIADO
+0162,C2 A0,,                CLR     ENABLE          ;DESLIGA O PULSO
+0164,74 01,,                MOV     A,#1
+0166,31 31,,                ACALL   DELAY           ;DELAY DE 1ms
+0168,22,,                RET                     ;ROTORNA DA ROTINA
+,,,
+,,,;------------------------- ROTINA DE ESCRITA DA TELA DE PEDIDO DE SENHA ----------------------------
+,,,;ESTA ROTINA ESCREVE NA TELA PRINCIPAL DO PROGRAMA, COM AS FRASES
+,,,; LINHA 1: SENHA:
+,,,; LINHA 2:
+0169,C2 A1,TELA_S,TELA_S: CLR     RS              ;SELECIONA DISPLAY P/ COMANDOS
+016B,74 01,,        MOV     A,#1
+016D,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA LIMPAR A TELA
+016F,74 02,,        MOV     A,#2
+0171,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+0173,74 0E,,        MOV     A,#0EH
+0175,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA LIGAR CURSOR
+0177,74 02,,        MOV     A,#2
+0179,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+017B,74 0D,,        MOV     A,#0DH
+017D,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA CURSOR PISCANDO
+017F,74 02,,        MOV     A,#2
+0181,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+0183,74 82,,        MOV     A,#82H
+0185,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 0 / COLUNA 2)
+0187,D2 A1,,        SETB    RS              ;SELECIONA O DISPLAY P/ DADO
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "SENHA:"
+0189,74 53,,        MOV     A,#'S'
+018B,31 39,,        ACALL   ESCREVE
+018D,74 45,,        MOV     A,#'E'
+018F,31 39,,        ACALL   ESCREVE
+0191,74 4E,,        MOV     A,#'N'
+0193,31 39,,        ACALL   ESCREVE
+0195,74 48,,        MOV     A,#'H'
+0197,31 39,,        ACALL   ESCREVE
+0199,74 41,,        MOV     A,#'A'
+019B,31 39,,        ACALL   ESCREVE
+019D,74 3A,,        MOV     A,#':'
+019F,31 39,,        ACALL   ESCREVE
+01A1,22,,        RET
+,,,;-------------------------- ROTINA PARA ANALISE DE SENHA ------------------------------
+,,,;ROTINA PARA VERIFICAR A SENHA CORRETA
+,,,
+01A2,79 22,COMPARA,COMPARA:        MOV     R1,#22H
+01A4,B7 35 16,,                CJNE    @R1,#'5',F_COMP
+01A7,79 23,,                MOV     R1,#23H
+01A9,B7 43 11,,                CJNE    @R1,#'C',F_COMP
+01AC,79 24,,                MOV     R1,#24H
+01AE,B7 33 0C,,                CJNE    @R1,#'3',F_COMP
+01B1,79 25,,                MOV     R1,#25H
+01B3,B7 30 07,,                CJNE    @R1,#'0',F_COMP
+01B6,79 26,,                MOV     R1,#26H
+01B8,B7 41 02,,                CJNE    @R1,#'A',F_COMP
+01BB,D2 02,,                SETB    FLAG_SENHA
+01BD,78 22,F_COMP,F_COMP:         MOV     R0,#22H
+01BF,22,,                RET
+,,,
+,,,;-------------------------- ROTINA PARA MENSAGEM DE ERRO NA SENHA ---------------------
+,,,;ESTA ROTINA ESCREVE NA TELA PRINCIPAL DO PROGRAMA, COM AS FRASES
+,,,; LINHA 1: Senha INCORRETA
+,,,; LINHA 2: Tente novamente
+01C0,C2 A1,M_ERRO,M_ERRO: CLR     RS              ;SELECIONA DISPLAY P/ COMANDOS
+01C2,74 01,,        MOV     A,#1
+01C4,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA LIMPAR A TELA
+01C6,74 02,,        MOV     A,#2
+01C8,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+01CA,74 0A,,        MOV     A,#0AH
+01CC,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+01CE,74 02,,        MOV     A,#2
+01D0,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+01D2,74 0C,,        MOV     A,#0CH
+01D4,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+01D6,74 02,,        MOV     A,#2
+01D8,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+01DA,74 80,,        MOV     A,#80H
+01DC,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 0 / COLUNA 0)
+01DE,D2 A1,,        SETB    RS              ;SELECIONA O DISPLAY P/ DADO
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "Senha INCORRETA"
+01E0,74 53,,        MOV     A,#'S'
+01E2,31 39,,        ACALL   ESCREVE
+01E4,74 45,,        MOV     A,#'E'
+01E6,31 39,,        ACALL   ESCREVE
+01E8,74 4E,,        MOV     A,#'N'
+01EA,31 39,,        ACALL   ESCREVE
+01EC,74 48,,        MOV     A,#'H'
+01EE,31 39,,        ACALL   ESCREVE
+01F0,74 41,,        MOV     A,#'A'
+01F2,31 39,,        ACALL   ESCREVE
+01F4,74 20,,        MOV     A,#' '
+01F6,31 39,,        ACALL   ESCREVE
+01F8,74 49,,        MOV     A,#'I'
+01FA,31 39,,        ACALL   ESCREVE
+01FC,74 4E,,        MOV     A,#'N'
+01FE,31 39,,        ACALL   ESCREVE
+0200,74 43,,        MOV     A,#'C'
+0202,31 39,,        ACALL   ESCREVE
+0204,74 4F,,        MOV     A,#'O'
+0206,31 39,,        ACALL   ESCREVE
+0208,74 52,,        MOV     A,#'R'
+020A,31 39,,        ACALL   ESCREVE
+020C,74 52,,        MOV     A,#'R'
+020E,31 39,,        ACALL   ESCREVE
+0210,74 45,,        MOV     A,#'E'
+0212,31 39,,        ACALL   ESCREVE
+0214,74 54,,        MOV     A,#'T'
+0216,31 39,,        ACALL   ESCREVE
+0218,74 41,,        MOV     A,#'A'
+021A,31 39,,        ACALL   ESCREVE
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "Tente novamente"
+021C,C2 A1,,        CLR     RS              ;SELECIONA DISPLAY PARA COMANDOS
+021E,74 C0,,        MOV     A,#0C0H
+0220,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 1 / COLUNA 0)
+0222,D2 A1,,        SETB    RS              ;SELECIONA DISPLAY PARA DADOS
+0224,74 54,,        MOV     A,#'T'
+0226,31 39,,        ACALL   ESCREVE
+0228,74 45,,        MOV     A,#'E'
+022A,31 39,,        ACALL   ESCREVE
+022C,74 4E,,        MOV     A,#'N'
+022E,31 39,,        ACALL   ESCREVE
+0230,74 54,,        MOV     A,#'T'
+0232,31 39,,        ACALL   ESCREVE
+0234,74 45,,        MOV     A,#'E'
+0236,31 39,,        ACALL   ESCREVE
+0238,74 20,,        MOV     A,#' '
+023A,31 39,,        ACALL   ESCREVE
+023C,74 4E,,        MOV     A,#'N'
+023E,31 39,,        ACALL   ESCREVE
+0240,74 4F,,        MOV     A,#'O'
+0242,31 39,,        ACALL   ESCREVE
+0244,74 56,,        MOV     A,#'V'
+0246,31 39,,        ACALL   ESCREVE
+0248,74 41,,        MOV     A,#'A'
+024A,31 39,,        ACALL   ESCREVE
+024C,74 4D,,        MOV     A,#'M'
+024E,31 39,,        ACALL   ESCREVE
+0250,74 45,,        MOV     A,#'E'
+0252,31 39,,        ACALL   ESCREVE
+0254,74 4E,,        MOV     A,#'N'
+0256,31 39,,        ACALL   ESCREVE
+0258,74 54,,        MOV     A,#'T'
+025A,31 39,,        ACALL   ESCREVE
+025C,74 45,,        MOV     A,#'E'
+025E,31 39,,        ACALL   ESCREVE
+,,,
+0260,22,,        RET
+,,,
+,,,
+,,,;-------------------------- MENSAGEM MENU -----------------------------
+,,,;ESTA ROTINA ESCREVE NA TELA PRINCIPAL DO PROGRAMA, COM AS FRASES
+,,,; LINHA 1: 1-MOTOR_P 2-TEMP
+,,,; LINHA 2: 3-SERIAL A-SENHA
+0261,C2 A1,M_MENU,M_MENU: CLR     RS              ;SELECIONA DISPLAY P/ COMANDOS
+0263,74 01,,        MOV     A,#1
+0265,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA LIMPAR A TELA
+0267,74 02,,        MOV     A,#2
+0269,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+026B,74 0A,,        MOV     A,#0AH
+026D,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+026F,74 02,,        MOV     A,#2
+0271,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+0273,74 0C,,        MOV     A,#0CH
+0275,31 39,,        ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+0277,74 02,,        MOV     A,#2
+0279,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+027B,74 80,,        MOV     A,#80H
+027D,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 0 / COLUNA 0)
+027F,D2 A1,,        SETB    RS              ;SELECIONA O DISPLAY P/ DADO
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "1-MOTOR_P 2-TEMP"
+0281,74 31,,        MOV     A,#'1'
+0283,31 39,,        ACALL   ESCREVE
+0285,74 2D,,        MOV     A,#'-'
+0287,31 39,,        ACALL   ESCREVE
+0289,74 4D,,        MOV     A,#'M'
+028B,31 39,,        ACALL   ESCREVE
+028D,74 4F,,        MOV     A,#'O'
+028F,31 39,,        ACALL   ESCREVE
+0291,74 54,,        MOV     A,#'T'
+0293,31 39,,        ACALL   ESCREVE
+0295,74 4F,,        MOV     A,#'O'
+0297,31 39,,        ACALL   ESCREVE
+0299,74 52,,        MOV     A,#'R'
+029B,31 39,,        ACALL   ESCREVE
+029D,74 5F,,        MOV     A,#'_'
+029F,31 39,,        ACALL   ESCREVE
+02A1,74 50,,        MOV     A,#'P'
+02A3,31 39,,        ACALL   ESCREVE
+02A5,74 20,,        MOV     A,#' '
+02A7,31 39,,        ACALL   ESCREVE
+02A9,74 32,,        MOV     A,#'2'
+02AB,31 39,,        ACALL   ESCREVE
+02AD,74 2D,,        MOV     A,#'-'
+02AF,31 39,,        ACALL   ESCREVE
+02B1,74 54,,        MOV     A,#'T'
+02B3,31 39,,        ACALL   ESCREVE
+02B5,74 45,,        MOV     A,#'E'
+02B7,31 39,,        ACALL   ESCREVE
+02B9,74 4D,,        MOV     A,#'M'
+02BB,31 39,,        ACALL   ESCREVE
+02BD,74 50,,        MOV     A,#'P'
+02BF,31 39,,        ACALL   ESCREVE
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "3-SERIAL A-SENHA"
+02C1,C2 A1,,        CLR     RS              ;SELECIONA DISPLAY PARA COMANDOS
+02C3,74 C0,,        MOV     A,#0C0H
+02C5,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 1 / COLUNA 0)
+02C7,D2 A1,,        SETB    RS              ;SELECIONA DISPLAY PARA DADOS
+02C9,74 33,,        MOV     A,#'3'
+02CB,31 39,,        ACALL   ESCREVE
+02CD,74 2D,,        MOV     A,#'-'
+02CF,31 39,,        ACALL   ESCREVE
+02D1,74 53,,        MOV     A,#'S'
+02D3,31 39,,        ACALL   ESCREVE
+02D5,74 45,,        MOV     A,#'E'
+02D7,31 39,,        ACALL   ESCREVE
+02D9,74 52,,        MOV     A,#'R'
+02DB,31 39,,        ACALL   ESCREVE
+02DD,74 49,,        MOV     A,#'I'
+02DF,31 39,,        ACALL   ESCREVE
+02E1,74 41,,        MOV     A,#'A'
+02E3,31 39,,        ACALL   ESCREVE
+02E5,74 4C,,        MOV     A,#'L'
+02E7,31 39,,        ACALL   ESCREVE
+02E9,74 20,,        MOV     A,#' '
+02EB,31 39,,        ACALL   ESCREVE
+02ED,74 41,,        MOV     A,#'A'
+02EF,31 39,,        ACALL   ESCREVE
+02F1,74 2D,,        MOV     A,#'-'
+02F3,31 39,,        ACALL   ESCREVE
+02F5,74 53,,        MOV     A,#'S'
+02F7,31 39,,        ACALL   ESCREVE
+02F9,74 45,,        MOV     A,#'E'
+02FB,31 39,,        ACALL   ESCREVE
+02FD,74 4E,,        MOV     A,#'N'
+02FF,31 39,,        ACALL   ESCREVE
+0301,74 48,,        MOV     A,#'H'
+0303,31 39,,        ACALL   ESCREVE
+0305,74 41,,        MOV     A,#'A'
+0307,31 39,,        ACALL   ESCREVE
+0309,22,,        RET
+,,,
+,,,;-------------------------- MENSAGEM MOTOR -----------------------------
+,,,;ESTA ROTINA ESCREVE NA TELA DO LCD, COM AS FRASES
+,,,; LINHA 1:  VELOCIDADE: X
+,,,; LINHA 2:         #-VOLTA
+030A,C2 A1,M_MOTOR,M_MOTOR:        CLR     RS              ;SELECIONA DISPLAY P/ COMANDOS
+030C,74 01,,                MOV     A,#1
+030E,31 39,,                ACALL   ESCREVE         ;ESCREVE COMANDO PARA LIMPAR A TELA
+0310,74 02,,                MOV     A,#2
+0312,31 31,,                ACALL   DELAY           ;DELAY DE 1ms
+0314,74 0A,,                MOV     A,#0AH
+0316,31 39,,                ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+0318,74 02,,                MOV     A,#2
+031A,31 31,,                ACALL   DELAY           ;DELAY DE 1ms
+031C,74 0C,,                MOV     A,#0CH
+031E,31 39,,                ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+0320,74 02,,                MOV     A,#2
+0322,31 31,,                ACALL   DELAY           ;DELAY DE 1ms
+0324,74 80,,                MOV     A,#80H
+0326,31 39,,                ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 0 / COLUNA 0)
+0328,D2 A1,,                SETB    RS              ;SELECIONA O DISPLAY P/ DADO
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "VELOCIDADE: X"
+032A,74 56,,        MOV     A,#'V'
+032C,31 39,,        ACALL   ESCREVE
+032E,74 45,,        MOV     A,#'E'
+0330,31 39,,        ACALL   ESCREVE
+0332,74 4C,,        MOV     A,#'L'
+0334,31 39,,        ACALL   ESCREVE
+0336,74 4F,,        MOV     A,#'O'
+0338,31 39,,        ACALL   ESCREVE
+033A,74 43,,        MOV     A,#'C'
+033C,31 39,,        ACALL   ESCREVE
+033E,74 49,,        MOV     A,#'I'
+0340,31 39,,        ACALL   ESCREVE
+0342,74 44,,        MOV     A,#'D'
+0344,31 39,,        ACALL   ESCREVE
+0346,74 41,,        MOV     A,#'A'
+0348,31 39,,        ACALL   ESCREVE
+034A,74 44,,        MOV     A,#'D'
+034C,31 39,,        ACALL   ESCREVE
+034E,74 45,,        MOV     A,#'E'
+0350,31 39,,        ACALL   ESCREVE
+0352,74 3A,,        MOV     A,#':'
+0354,31 39,,        ACALL   ESCREVE
+,,,
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "#-VOLTA"
+0356,C2 A1,,        CLR     RS              ;SELECIONA DISPLAY PARA COMANDOS
+0358,74 C1,,        MOV     A,#0C1H
+035A,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 1 / COLUNA 1)
+035C,D2 A1,,        SETB    RS              ;SELECIONA DISPLAY PARA DADOS
+035E,74 23,,        MOV     A,#23H
+0360,31 39,,        ACALL   ESCREVE
+0362,74 20,,        MOV     A,#' '
+0364,31 39,,        ACALL   ESCREVE
+0366,74 56,,        MOV     A,#'V'
+0368,31 39,,        ACALL   ESCREVE
+036A,74 4F,,        MOV     A,#'O'
+036C,31 39,,        ACALL   ESCREVE
+036E,74 4C,,        MOV     A,#'L'
+0370,31 39,,        ACALL   ESCREVE
+0372,74 54,,        MOV     A,#'T'
+0374,31 39,,        ACALL   ESCREVE
+0376,74 41,,        MOV     A,#'A'
+0378,31 39,,        ACALL   ESCREVE
+037A,74 52,,        MOV     A,#'R'
+037C,31 39,,        ACALL   ESCREVE
+037E,22,,        RET
+,,,
+,,,;-------------------------- MENSAGEM TEMPERATURA -----------------------------
+,,,;ESTA ROTINA ESCREVE NA TELA DO LCD, COM AS FRASES
+,,,; LINHA 1:  TEMPERATURA
+,,,; LINHA 2:  ATUAL:
+037F,C2 A1,M_TEMP,M_TEMP: CLR     RS              ;SELECIONA DISPLAY P/ COMANDOS
+0381,74 01,,                MOV     A,#1
+0383,31 39,,                ACALL   ESCREVE         ;ESCREVE COMANDO PARA LIMPAR A TELA
+0385,74 02,,                MOV     A,#2
+0387,31 31,,                ACALL   DELAY           ;DELAY DE 1ms
+0389,74 0A,,                MOV     A,#0AH
+038B,31 39,,                ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+038D,74 02,,                MOV     A,#2
+038F,31 31,,                ACALL   DELAY           ;DELAY DE 1ms
+0391,74 0C,,                MOV     A,#0CH
+0393,31 39,,                ACALL   ESCREVE         ;ESCREVE COMANDO PARA DESLIGAR CURSOR
+0395,74 02,,                MOV     A,#2
+0397,31 31,,                ACALL   DELAY           ;DELAY DE 1ms
+0399,74 82,,                MOV     A,#82H
+039B,31 39,,                ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 0 / COLUNA 2)
+039D,D2 A1,,                SETB    RS              ;SELECIONA O DISPLAY P/ DADO
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "TEMPERATURA"
+039F,74 54,,        MOV     A,#'T'
+03A1,31 39,,        ACALL   ESCREVE
+03A3,74 45,,        MOV     A,#'E'
+03A5,31 39,,        ACALL   ESCREVE
+03A7,74 4D,,        MOV     A,#'M'
+03A9,31 39,,        ACALL   ESCREVE
+03AB,74 50,,        MOV     A,#'P'
+03AD,31 39,,        ACALL   ESCREVE
+03AF,74 45,,        MOV     A,#'E'
+03B1,31 39,,        ACALL   ESCREVE
+03B3,74 52,,        MOV     A,#'R'
+03B5,31 39,,        ACALL   ESCREVE
+03B7,74 41,,        MOV     A,#'A'
+03B9,31 39,,        ACALL   ESCREVE
+03BB,74 54,,        MOV     A,#'T'
+03BD,31 39,,        ACALL   ESCREVE
+03BF,74 55,,        MOV     A,#'U'
+03C1,31 39,,        ACALL   ESCREVE
+03C3,74 52,,        MOV     A,#'R'
+03C5,31 39,,        ACALL   ESCREVE
+03C7,74 41,,        MOV     A,#'A'
+03C9,31 39,,        ACALL   ESCREVE
+,,,
+,,,; COMANDOS PARA ESCREVER AS LETRAS DE "ATUAL: XXXºC"
+03CB,C2 A1,,        CLR     RS              ;SELECIONA DISPLAY PARA COMANDOS
+03CD,74 C8,,        MOV     A,#0C8H
+03CF,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 1 / COLUNA 6)
+03D1,D2 A1,,        SETB    RS              ;SELECIONA DISPLAY PARA DADOS
+,,,
+03D3,74 DF,,        MOV     A,#0DFH
+03D5,31 39,,        ACALL   ESCREVE
+03D7,74 43,,        MOV     A,#'C'
+03D9,31 39,,        ACALL   ESCREVE
+03DB,22,,        RET
+,,,
+,,,;======================================================================================
+,,,;================== CONFIGURAÇÕES INICIAIS DE HARDWARE E SOFTWARE =====================
+,,,;======================================================================================
+,,,; NESTA ROTINA SERÁ FEITO AS CONFIGURAÇÕES INICIAS DO PROGRAMA
+,,,
+03DC,75 81 2F,CONFIG,CONFIG: MOV     SP,#2FH         ;DESLOCAMENTO DA PILHA
+03DF,75 A8 8B,,        MOV     IE,#8BH         ;HABILITAÇÃO DAS INTERRUPÇÕES
+,,,                                ;HABILITA O TIMER0 O TIMER 1 A EXT_0 E A HABILITAÇÃO GERAL
+03E2,75 B8 01,,        MOV     IP,#01H         ;PRIORIDADES DAS INTERRUPÇÕES
+,,,                                ;PRIORIDADE MAIOR PARA EXT_0
+03E5,75 89 12,,        MOV     TMOD,#12H       ;TIMR_0 EM MODO 2 R TIMER_1 EM MODO 1
+03E8,75 8C 0C,,        MOV     TH0,#00CH       ;CHAMADA A CADA 256us
+03EB,75 8A 0C,,        MOV     TL0,#00CH
+03EE,75 8D 9E,,        MOV     TH1,#9EH        ;CHAMADA A CADA 25000us
+03F1,75 8B 58,,        MOV     TL1,#58H
+03F4,D2 88,,        SETB    IT0             ;HABILITA O TIMER0 PARA BORDA DE DESCIDA
+03F6,D2 8A,,        SETB    IT1             ;HABILITA O TIMAR1 PARA BORDA DE DESCIDA
+03F8,C2 8C,,        CLR     TR0             ;DESLIGA O TIMER0
+03FA,C2 8E,,        CLR     TR1             ;DESLIGA O TIMAR1
+03FC,C2 00,,        CLR     FLAG            ;INICIALIZA A FLAG ZERADA
+03FE,C2 02,,        CLR     FLAG_SENHA      ;GARANTE INICIALIZAÇÃO IGUAL A ZERO
+0400,74 00,,        MOV     A,#00H
+0402,F5 A0,,        MOV     P2,A            ;INICIALIZA A PORTA 2 TODA EM BAIXO
+0404,7E EF,,        MOV     R6,#0EFH        ;INICIALIZA R6 COM EFH PARA ROTACIONAR NO TIMER 0
+0406,78 22,,        MOV     R0,#22H         ;INICIALIZA R0 COM 22H PARA MEMÓRIA INICIAL DE SALVAMENTO
+0408,76 46,IN_1,IN_1:   MOV     @R0,#'F'        ;\
+040A,08,,        INC     R0              ;  >INSTRUÇÃO PARA GARANTIR O VALOR INICIAL DEFINIDO E DIFERENTE DA
+040B,B8 27 FA,,        CJNE    R0,#27H,IN_1    ;/
+040E,78 22,,        MOV     R0,#22H
+0410,74 FF,,        MOV     A,#0FFH
+0412,F5 90,,        MOV     TECLA,A         ;INICIALIZA P1 TODA EM NIVEL LÓGICO ALTO
+,,,
+,,,
+,,,; TEMPO PARA ESTABILIZAÇÃO DE LIGAMENTO DO DISPLAY LCD
+0414,74 FA,,        MOV     A,#250
+0416,31 31,,        ACALL   DELAY           ;DELAY DE 100ms
+,,,
+,,,
+,,,; CONFIGURAÇÃO INICIAL DO DISPLAY
+,,,; INICIALIZA O DISPLAY P/ COMUNIÇÃO DE 4 VIAS, DISPLAY PARA 2 LINHAS,
+,,,; CURSOR APAGADO E DESLOCAMENTO DO CURSOR À DIREITA.
+,,,
+0418,C2 A1,,        CLR     RS              ;SELECIONA O DISPLAY P/ COMANDOS
+,,,
+,,,;       MOV     A,#30H          ESCREVE COMANDO 30H PARA INICIALIZAÇÃO
+,,,;       MOV     DISPLAY,A       ATUALIZA DISPLAY (P2)
+041A,D2 A4,,        SETB    P2.4
+041C,D2 A5,,        SETB    P2.5
+041E,D2 A6,,        SETB    P2.6
+0420,C2 A7,,        CLR     P2.7
+0422,00,,        NOP                     ;TEMPO DE ESTABILIZAÇÃO
+0423,D2 A0,,        SETB    ENABLE          ;ENVIA UM PULSO DE ENABLE AO DISPLAY
+0425,00,,        NOP
+0426,00,,        NOP                     ;TEMPO DE ESTABILIZAÇÃO
+0427,C2 A0,,        CLR     ENABLE
+0429,74 08,,        MOV     A,#8
+042B,31 31,,        ACALL   DELAY           ;DELAY DE 4ms (EXIGIDO PELO DISPLAY)
+,,,
+,,,;       MOV     A,#30H          ESCREVE COMANDO 30H PARA INICIALIZAÇÃO
+,,,;       MOV     DISPLAY,A       ATUALIZA DISPLAY (P2)
+042D,D2 A4,,        SETB    P2.4
+042F,D2 A5,,        SETB    P2.5
+0431,D2 A6,,        SETB    P2.6
+0433,C2 A7,,        CLR     P2.7
+0435,00,,        NOP                     ;TEMPO DE ESTABILIZAÇÃO
+0436,D2 A0,,        SETB    ENABLE          ;ENVIA UM PULSO DE ENABLE AO DISPLAY
+0438,00,,        NOP
+0439,00,,        NOP                     ;TEMPO DE ESTABILIZAÇÃO
+043A,C2 A0,,        CLR     ENABLE
+043C,74 04,,        MOV     A,#4
+043E,31 31,,        ACALL   DELAY           ;DELAY DE 1ms (EXIGIDO PELO DISPLAY)
+,,,
+,,,;       MOV     A,#30H          ESCREVE COMANDO 30H PARA INICIALIZAÇÃO
+,,,;       MOV     DISPLAY,A       ATUALIZA DISPLAY (P2)
+0440,D2 A4,,        SETB    P2.4
+0442,D2 A5,,        SETB    P2.5
+0444,D2 A6,,        SETB    P2.6
+0446,C2 A7,,        CLR     P2.7
+0448,00,,        NOP                     ;TEMPO DE ESTABILIZAÇÃO
+0449,D2 A0,,        SETB    ENABLE          ;ENVIA UM PULSO DE ENABLE AO DISPLAY
+044B,00,,        NOP
+044C,00,,        NOP                     ;TEMPO DE ESTABILIZAÇÃO
+044D,C2 A0,,        CLR     ENABLE
+044F,74 04,,        MOV     A,#4
+0451,31 31,,        ACALL   DELAY           ;DELAY DE 1ms (EXIGIDO PELO DISPLAY)
+,,,
+,,,;       MOV     A,#00100000B    ESCREVE COMANDO PARA ESTABELECER COMUNICAÇÃO DE 4 VIAS
+,,,;       MOV     DISPLAY,A       ATUALIZA DISPLAY (P2)
+0453,C2 A4,,        CLR     P2.4
+0455,D2 A5,,        SETB    P2.5
+0457,C2 A6,,        CLR     P2.6
+0459,C2 A7,,        CLR     P2.7
+045B,00,,        NOP
+045C,D2 A0,,        SETB    ENABLE          ;ENVIA UM PULSO DE ENABLE AO DISPLAY
+045E,00,,        NOP
+045F,00,,        NOP
+0460,C2 A0,,        CLR     ENABLE
+0462,74 04,,        MOV     A,#4
+0464,31 31,,        ACALL   DELAY           ;DELAY DE 1ms (EXIGIDO PELO DISPLAY)
+,,,
+0466,74 28,,        MOV     A,#28H          ;ESCREVE COMANDO PARA DISPLAY DE DUAS LINHAS E MATRIZ 7x5
+0468,31 39,,        ACALL   ESCREVE
+046A,74 01,,        MOV     A,#00000001B    ;ESCREVE COMANDO PARA LIMPAR TODO O DISPLAY
+046C,31 39,,        ACALL   ESCREVE
+046E,74 04,,        MOV     A,#4
+0470,31 31,,        ACALL   DELAY           ;DELAY DE 1ms
+0472,74 0C,,        MOV     A,#00001100B    ;LIGA DISPLAY SEM CURSOR
+0474,31 39,,        ACALL   ESCREVE
+0476,74 06,,        MOV     A,#00000110B    ;DESLOCAMENTO AUTOMÁTICO À DIREITA DO CURSOR
+0478,31 39,,        ACALL   ESCREVE
+047A,D2 A1,,        SETB    RS              ;SELECIONA DISPLAY PARA DADOS
+,,,
+,,,; INICIO ROTINA PRINCIPAL DO PROGRAMA A SER EXECUTADO
+,,,
+047C,31 69,INICIO,INICIO: ACALL   TELA_S          ;CHAMADA DA TELA DE SENHA
+047E,D2 8C,,        SETB    TR0             ;HABILITA O TIMER 0
+0480,20 00 20,PART_0,PART_0: JB      FLAG,PART_1     ;VERIFICA A FLAG PARA HABILITAR DE FORMA CORRETA O TIMER0
+0483,81 80,,        AJMP    PART_0          ;VOLTA PARA A VERIFICAÇÃO DA FLAG
+,,,
+0485,B8 27 21,PART_2,PART_2: CJNE    R0,#27H,PART_3          ;COMPARA SE R0 JA FOI INCREMENTADO 5 VEZES
+0488,C2 A8,,        CLR     EX0                     ;DESABILITA A EXTERNA 0
+048A,31 A2,,        ACALL   COMPARA                 ;CHAMA ROTINA DE COMPARAÇÃO DE SENHA
+048C,C2 00,,        CLR     FLAG                    ;GARANTE FLAG ZERO PARA A PRÓXIMA CHAMADA
+048E,20 02 28,,        JB      FLAG_SENHA,PART_4       ;VERIFICA SE SENHA ESTA CORRETA, SE ESTIVER VAI PARA MENU PA
+0491,31 C0,,        ACALL   M_ERRO                  ;CASO A SENHA NÃO ESTEJA CORRETO CHAMA MENSAGEM DE ERRO
+0493,75 10 19,,        MOV     10H,#25                 ;TEMPO PARA VISUALIZACAO DA MENSAGEM
+0496,74 FA,,        MOV     A,#250
+0498,31 31,,        ACALL   DELAY                   ;CHAMADA DE UMA ROTINA DE ~125ms
+049A,D5 10 FB,,        DJNZ    10H,$-2
+049D,78 22,,        MOV     R0,#22H
+049F,D2 A8,,        SETB    EX0                     ;HABILITA A EXTERNA 0
+04A1,81 7C,,        AJMP    INICIO                  ;VOLTA PARA O INICIO
+,,,
+,,,
+04A3,E6,PART_1,PART_1: MOV     A,@R0
+04A4,31 39,,        ACALL   ESCREVE
+04A6,08,,        INC     R0
+04A7,81 85,,        AJMP    PART_2
+04A9,75 10 05,PART_3,PART_3: MOV     10H,#5          ;TEMPO DE ESPERA PARA UM NOVO DÍGITO
+04AC,74 FF,,        MOV     A,#255          ;CHAMA ROTINA DE APROXIMADAMENTE DE 123ms
+04AE,31 31,,        ACALL   DELAY
+04B0,D5 10 FB,,        DJNZ    10H,$-2         ;VOLTA PARA CARREGAR, PERDER MAIS 123ms SE 10H NAO FOR ZERO
+04B3,D2 8C,,        SETB    TR0             ;HABILITA O TIMER 0
+04B5,C2 00,,        CLR     FLAG            ;LIMPA A FLAG AUXILIAR DO TECLADO
+04B7,81 80,,        AJMP    PART_0          ;VOLTA PARA A VERIFICAÇÃO DA FLAG
+,,,
+,,,
+04B9,78 22,PART_4,PART_4: MOV     R0,#22H
+04BB,76 00,,        MOV     @R0,#00H        ;GARANTE VALOR DESCONHECIDO PARA A PRÓXIMA COMPARAÇÃO
+04BD,51 61,,        ACALL   M_MENU          ;MENSAGEM DE MENU
+04BF,75 10 05,,        MOV     10H,#5          ;TEMPO DE ESPERA PARA UM NOVO DÍGITO
+04C2,74 FF,,        MOV     A,#255          ;CHAMA ROTINA DE APROXIMADAMENTE DE 123ms
+04C4,31 31,,        ACALL   DELAY
+04C6,D5 10 FB,,        DJNZ    10H,$-2         ;VOLTA PARA CARREGAR, PERDER MAIS 123ms SE 10H NAO FOR ZERO
+04C9,D2 A8,,        SETB    EX0             ;HABILITA A EXTERNA 0
+04CB,C2 00,,        CLR     FLAG
+04CD,D2 8C,,        SETB    TR0             ;LIGA O TIMER 0
+,,,
+04CF,30 00 FD,PART_8,PART_8: JNB     FLAG,$
+04D2,B6 31 09,,        CJNE    @R0,#'1',PART_5
+04D5,75 0A 01,,        MOV     0AH,#1          ;INICIALIZA O RIGISTRADOR UTILIZADO NO TIMER 1
+04D8,76 30,,        MOV     @R0,#'0'        ;PARA INICIALIZAR COM VELOCIDADE 0
+04DA,C2 00,,        CLR     FLAG
+04DC,A1 05,,        AJMP    MOTOR
+04DE,B6 32 04,PART_5,PART_5: CJNE    @R0,#'2',PART_6
+04E1,C2 00,,        CLR     FLAG
+04E3,A1 3D,,        AJMP    TEMP
+04E5,B6 33 04,PART_6,PART_6: CJNE    @R0,#'3',PART_7
+04E8,C2 00,,        CLR     FLAG
+04EA,81 FF,,        AJMP    PART_9
+04EC,B6 41 10,PART_7,PART_7: CJNE    @R0,#'A',PART_9
+04EF,C2 00,,        CLR     FLAG
+04F1,75 10 05,,        MOV     10H,#5          ;TEMPO DE ESPERA PARA UM NOVO DÍGITO
+04F4,74 FF,,        MOV     A,#255          ;CHAMA ROTINA DE APROXIMADAMENTE DE 123ms
+04F6,31 31,,        ACALL   DELAY
+04F8,D5 10 FB,,        DJNZ    10H,$-2         ;VOLTA PARA CARREGAR, PERDER MAIS 123ms SE 10H NAO FOR ZERO
+04FB,C2 02,,        CLR     FLAG_SENHA
+04FD,81 7C,,        AJMP    INICIO
+,,,
+04FF,C2 00,PART_9,PART_9:         CLR     FLAG
+0501,D2 8C,,                SETB    TR0             ;LIGA O TIMER 0
+0503,81 CF,,                AJMP    PART_8
+,,,;----------------------------- MOTOR DE PASSO -----------------------------------
+0505,71 0A,MOTOR,MOTOR:  ACALL   M_MOTOR
+0507,75 10 05,,        MOV     10H,#5          ;TEMPO DE ESPERA PARA UM NOVO DÍGITO
+050A,74 FF,,        MOV     A,#255          ;CHAMA ROTINA DE APROXIMADAMENTE DE 123ms
+050C,31 31,,        ACALL   DELAY
+050E,D5 10 FB,,        DJNZ    10H,$-2         ;VOLTA PARA CARREGAR, PERDER MAIS 123ms SE 10H NAO FOR ZERO
+0511,76 30,,        MOV     @R0,#'0'        ;PARA INICIALIZAR COM VELOCIDADE 0
+0513,7B 01,,        MOV     R3,#01H
+0515,D2 8C,,        SETB    TR0
+0517,D2 8E,,        SETB    TR1             ;LIGA O TIMER 1
+0519,B6 30 04,MT_3,MT_3:   CJNE    @R0,#'0',MT_1
+051C,C2 8E,,        CLR     TR1
+051E,A1 29,,        AJMP    MT_4
+0520,B6 23 04,MT_1,MT_1:   CJNE    @R0,#23H,MT_2
+0523,C2 8E,,        CLR     TR1             ;DESLIGA O TIMER 1 ANTES DE SAIR DA ROTINA DO MOTOR
+0525,81 B9,,        AJMP    PART_4          ;VOLTA PARA O MENU
+,,,
+0527,D2 8E,MT_2,MT_2:   SETB    TR1
+0529,30 03 ED,MT_4,MT_4:   JNB     FLAG_MOTOR,MT_3
+052C,C2 03,,        CLR     FLAG_MOTOR
+052E,C2 A1,,        CLR     RS              ;SELECIONA DISPLAY PARA COMANDOS
+0530,74 8D,,        MOV     A,#08DH
+0532,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 1 / COLUNA 1)
+0534,D2 A1,,        SETB    RS              ;SELECIONA DISPLAY PARA DADOS
+0536,E6,,        MOV     A,@R0
+0537,31 39,,        ACALL   ESCREVE
+0539,D2 8C,,        SETB    TR0
+053B,A1 19,,        AJMP    MT_3
+,,,
+,,,;---------------------------------- TEMPERATURA ---------------------------------------
+053D,71 7F,TEMP,TEMP:   ACALL   M_TEMP
+053F,75 10 05,,        MOV     10H,#5          ;TEMPO DE ESPERA PARA UM NOVO DÍGITO
+0542,74 FF,,        MOV     A,#255          ;CHAMA ROTINA DE APROXIMADAMENTE DE 123ms
+0544,31 31,,        ACALL   DELAY
+0546,D5 10 FB,,        DJNZ    10H,$-2         ;VOLTA PARA CARREGAR, PERDER MAIS 123ms SE 10H NAO FOR ZERO
+0549,76 00,,        MOV     @R0,#00H        ;GARANTE VALOR DIFERENTE DE 23H
+,,,
+054B,D2 8C,TE_1,TE_1:   SETB    TR0
+054D,75 F0 64,,        MOV     0F0H,#100
+0550,E5 80,,        MOV     A,P0
+0552,84,,        DIV     AB
+0553,F5 0C,,        MOV     0CH,A
+0555,E5 F0,,        MOV     A,0F0H
+0557,75 F0 0A,,        MOV     0F0H,#10
+055A,84,,        DIV     AB
+055B,F5 0D,,        MOV     0DH,A
+,,,
+055D,C2 A1,,        CLR     RS              ;SELECIONA DISPLAY PARA COMANDOS
+055F,74 C5,,        MOV     A,#0C5H
+0561,31 39,,        ACALL   ESCREVE         ;COMANDO PARA POSICIONAR O CURSOR (LINHA 1 / COLUNA 10)
+0563,D2 A1,,        SETB    RS              ;SELECIONA DISPLAY PARA DADOS
+0565,E5 0C,,        MOV     A,0CH
+0567,24 30,,        ADD     A,#30H
+0569,31 39,,        ACALL   ESCREVE
+,,,
+056B,E5 0D,,        MOV     A,0DH
+056D,24 30,,        ADD     A,#30H
+056F,31 39,,        ACALL   ESCREVE
+,,,
+0571,E5 F0,,        MOV     A,0F0H
+0573,24 30,,        ADD     A,#30H
+0575,31 39,,        ACALL   ESCREVE
+,,,
+0577,75 10 05,,        MOV     10H,#5          ;TEMPO DE ESPERA PARA UM NOVO DÍGITO
+057A,B6 23 04,TE_0,TE_0:   CJNE    @R0,#23H,TE_2
+057D,C2 8C,,        CLR     TR0             ;DESLIGA TIMER 0 PARA SAIR DA ROTINA
+057F,81 B9,,        AJMP    PART_4          ;VOLTA PARA O MENU SE # FOR PRESSIONADO
+,,,
+0581,74 FF,TE_2,TE_2:   MOV     A,#255          ;CHAMA ROTINA DE APROXIMADAMENTE DE 123ms
+0583,31 31,,        ACALL   DELAY
+0585,D5 10 F2,,        DJNZ    10H,TE_0        ;VOLTA PARA ANALIZAR A TECLA PRESSIONADA E PERDER MAIS 123ms SE 10H
+0588,A1 4B,,        AJMP    TE_1
+,,,
+,,,;---------------------------- FIM DO PROGRAMA -----------------------------------
+000E,,,        END

@@ -1,0 +1,71 @@
+;                     PROGRAMA LCD
+;********************************************************
+RS  EQU P2.0
+E   EQU P2.1
+    MOV SP,#2FH
+;*********************************************************
+INICIO: ACALL   CONF
+    MOV A,#80H
+    ACALL   INST
+    MOV DPTR,#TABELA
+    ACALL   TEMPO
+    ACALL   TEMPO
+    ACALL   MSG
+    MOV A,#0C0H
+    ACALL   INST
+    MOV DPTR,#TABELA2
+    ACALL   MSG
+    MOV A,#094H
+    ACALL   INST
+    MOV DPTR,#TABELA3
+    ACALL   MSG
+	MOV A,#0D4H
+    ACALL   INST
+    MOV DPTR,#TABELA4
+    ACALL   MSG    
+    AJMP    $   
+;*********************************************************
+MSG:    MOV R0,#0
+PROX:   MOV A,R0
+    MOVC    A,@A+DPTR
+    JZ  FIM
+    ACALL   DADO
+    INC R0
+    AJMP    PROX
+FIM:    RET 
+;*********************************************************
+CONF:   MOV A,#38H
+    ACALL   INST
+    ACALL   INST
+    ACALL   INST
+    MOV A,#0CH
+    ACALL   INST
+    MOV A,#06H
+    ACALL   INST
+    MOV A,#01H
+    ACALL   INST
+    RET
+;*********************************************************
+INST:   MOV P1,A
+    CLR RS
+    SETB    E
+    ACALL   TEMPO
+    CLR E
+    RET
+;*********************************************************
+TEMPO:  MOV 10H,#255
+    DJNZ    10H,$
+    RET
+;*********************************************************
+DADO:   MOV P1,A
+    SETB    RS
+    SETB    E
+    ACALL   TEMPO
+    CLR E
+    RET
+;*********************************************************
+TABELA: DB  '     MATHEUS SA   ',00H
+TABELA2:DB  '     28/08/2013   ',00H
+TABELA3:DB  ' INSTITUTO FEDERAL',00H
+TABELA4:DB  '  DO CEARA - IFCE ',00H
+END
